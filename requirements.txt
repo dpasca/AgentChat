@@ -1,0 +1,5 @@
+openai
+#apscheduler
+duckduckgo_search
+python-dotenv
+pytz

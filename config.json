@@ -1,0 +1,10 @@
+{
+    "app_version": "0.0.1",
+    "model_version": "gpt-4-1106-preview",
+    "enable_retrieval": true,
+    "assistant_name": "Xiao",
+    "app_title" : "Chat with Xiao",
+    "assistant_avatar": "assistant_avatar.jpg",
+    "assistant_codename": "xiao_0001",
+    "assistant_instructions": "assistant_instructions.md"
+}
