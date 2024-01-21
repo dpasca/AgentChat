@@ -7,12 +7,11 @@
 import os
 import inspect
 import urllib.parse
+from logger import *
 
 class StorageLocal:
-    def __init__(self, local_dir, ENABLE_LOGGING=False):
+    def __init__(self, local_dir):
         self.local_dir = local_dir
-        self.ENABLE_LOGGING = ENABLE_LOGGING
-
         if not os.path.exists(self.local_dir):
             os.makedirs(self.local_dir)
 
@@ -21,7 +20,7 @@ class StorageLocal:
         return os.path.isfile(file_path)
 
     def UploadFile(self, data_io, file_name):
-        self.logmsg(f"Uploading file {file_name}...")
+        logmsg(f"Uploading file {file_name}...")
         file_path = os.path.join(self.local_dir, file_name)
 
         # Create directories if needed
@@ -31,21 +30,10 @@ class StorageLocal:
             file.write(data_io.getvalue())
 
     def GetFileURL(self, file_name):
-        self.logmsg(f"Getting file url for {file_name}...")
+        logmsg(f"Getting file url for {file_name}...")
         try:
             file_path = os.path.join(self.local_dir, file_name)
             return urllib.parse.urljoin('file:', urllib.parse.quote(file_path))
         except Exception as e:
-            self.logerr(e)
+            logerr(e)
             return None
-
-    def logmsg(self, msg):
-        if self.ENABLE_LOGGING:
-            caller = inspect.currentframe().f_back.f_code.co_name
-            print(f"[{caller}] {msg}")
-
-    def logerr(self, msg):
-        if self.ENABLE_LOGGING:
-            caller = inspect.currentframe().f_back.f_code.co_name
-            print(f"\033[91m[ERR]\033[0m[{caller}] {msg}")
-

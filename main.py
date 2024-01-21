@@ -15,6 +15,7 @@ import pytz # For timezone conversion
 import inspect
 from StorageLocal import StorageLocal as Storage
 from io import BytesIO
+from logger import *
 import re
 
 # Load environment variables from .env file
@@ -24,40 +25,11 @@ import locale
 # Set the locale to the user's default setting
 locale.setlocale(locale.LC_ALL, '')
 
-# Our own local `session` dictionary to simulate Flask's session
-import os
-import json
-
 USER_BUCKET_PATH = "user_a_00001"
 
-# Enable for debugging purposes
-ENABLE_LOGGING = os.getenv('FORCE_ENABLE_LOGGING', '0') == '1'
 ENABLE_SLEEP_LOGGING = False
 
 ENABLE_WEBSEARCH = True
-
-#==================================================================
-def logmsg(msg):
-    if ENABLE_LOGGING:
-        caller = inspect.currentframe().f_back.f_code.co_name
-        print(f"[{caller}] {msg}")
-
-def logerr(msg):
-    if ENABLE_LOGGING:
-        caller = inspect.currentframe().f_back.f_code.co_name
-        print(f"\033[91m[ERR]\033[0m[{caller}] {msg}")
-
-def show_json(obj):
-    try:
-        if isinstance(obj, list):
-            logmsg(json.dumps(obj))  # Serialize the entire list as JSON
-        else:
-            logmsg(json.loads(obj.model_dump_json()))  # For objects with model_dump_json
-    except AttributeError:
-        logerr("Object does not support model_dump_json")
-    except:
-        logmsg("Object is not JSON serializable, plain print below...")
-        logmsg(obj)
 
 #==================================================================
 def makeColoredRole(role):
@@ -76,6 +48,7 @@ def makeColoredRole(role):
     return coloredRole
 
 #==================================================================
+# Our own local `session` dictionary to simulate Flask's session
 class SessionDict(dict):
     def __init__(self, filename, *args, **kwargs):
         self.filename = filename
@@ -409,7 +382,7 @@ def message_to_dict(message, make_file_url):
 
 #==================================================================
 logmsg("Creating storage...")
-_storage = Storage("_storage", ENABLE_LOGGING)
+_storage = Storage("_storage")
 
 # Create the assistant
 logmsg("Creating assistant...")
@@ -736,8 +709,7 @@ def main():
         if user_input.lower() == '/exit':
             break
 
-        # Process the message (adjust the function to work without Flask's context)
-        # This part will depend on how you handle messages in OpenAIWrapper
+        # Send the message to the assistant and get the replies
         replies = json.loads(send_message(user_input)[0])
 
         # Simulate a response (replace with actual response handling)
