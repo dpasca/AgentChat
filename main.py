@@ -232,19 +232,11 @@ Do not produce "rebuttal" or "links" if "applicable" is false.
     def AddMessage(self, srcMsg):
         self.srcMessages.append(srcMsg)
 
-    def buildConvoString(self):
+    def buildConvoString(self, maxMessages):
         convo = ""
-        for srcMsg, index in zip(self.srcMessages, range(len(self.srcMessages))):
-            #convo += "- " + srcMsg['role'] + ": "
-            convo += f"- Message: {index} by {srcMsg['role']}:\n"
-            for cont in srcMsg['content']:
-                convo += cont['value'] + "\n"
-        return convo
-
-    def buildConvoStringRevOrder(self):
-        convo = ""
-        for i in range(len(self.srcMessages)):
-            index = len(self.srcMessages) - i - 1
+        n = len(self.srcMessages)
+        staIdx = max(0, n - maxMessages)
+        for index in range(staIdx, n):
             srcMsg = self.srcMessages[index]
             #convo += "- " + srcMsg['role'] + ": "
             convo += f"- Message: {index} by {srcMsg['role']}:\n"
@@ -252,8 +244,8 @@ Do not produce "rebuttal" or "links" if "applicable" is false.
                 convo += cont['value'] + "\n"
         return convo
 
-    def genCompletion(self, wrap, instructions):
-        convo = self.buildConvoString()
+    def genCompletion(self, wrap, instructions, maxMessages=1000):
+        convo = self.buildConvoString(maxMessages)
         #print(f"Sending Conversation:\n{convo}\n------")
         response = wrap.CreateCompletion(
             model=self.model,
@@ -269,7 +261,7 @@ Do not produce "rebuttal" or "links" if "applicable" is false.
     def GenCritique(self, wrap):
         return self.genCompletion(wrap, self.instructionsForCritique)
     def GenFactCheck(self, wrap):
-        return self.genCompletion(wrap, self.instructionsForFactCheck)
+        return self.genCompletion(wrap, self.instructionsForFactCheck, 3)
 
 _judge = ConvoJudge(
     model=config["support_model_version"],
@@ -815,21 +807,25 @@ def send_message(msg_text):
 
 #==================================================================
 def printFactCheck(fcReplies):
-    if len(fcReplies['fact_check']) > 0:
-        for reply in fcReplies['fact_check']:
-            #role = reply['role']
-            rebuttal = reply.get('rebuttal') or ''
-            links = reply.get('links') or []
-            if rebuttal == '' and len(links) == 0:
-                continue
+    #print(fcReplies)
+    #return
+    if len(fcReplies['fact_check']) == 0:
+        return
 
-            outStr = f"\n{COL_DRKGRAY} NOTICE: {rebuttal}"
-            if len(links) > 0:
-                outStr += "\n"
-                for link in links:
-                    outStr += f"- <{link}>\n"
+    for reply in fcReplies['fact_check']:
+        #role = reply['role']
+        rebuttal = reply.get('rebuttal') or ''
+        links = reply.get('links') or []
+        if rebuttal == '' and len(links) == 0:
+            continue
 
-            printChatMsg(outStr)
+        outStr = f"\n{COL_DRKGRAY} NOTICE: {rebuttal}"
+        if len(links) > 0:
+            outStr += "\n"
+            for link in links:
+                outStr += f"- <{link}>\n"
+
+        printChatMsg(outStr)
 
 #==================================================================
 # Main loop for console app
