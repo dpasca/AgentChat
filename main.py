@@ -31,20 +31,24 @@ ENABLE_SLEEP_LOGGING = False
 
 ENABLE_WEBSEARCH = True
 
+COL_BLUE = '\033[94m'
+COL_YELLOW = '\033[93m'
+COL_GREEN = '\033[92m'
+COL_ENDC = '\033[0m'
+COL_GRAY = '\033[90m'
+COL_DRKGRAY = '\033[1;30m'
+COL_ENDC = '\033[0m'
+
 #==================================================================
 def makeColoredRole(role):
-    BLUE = '\033[94m'
-    YELLOW = '\033[93m'
-    GREEN = '\033[92m'
-    ENDC = '\033[0m'
     coloredRole = ''
     if role == "assistant":
-        coloredRole = GREEN
+        coloredRole = COL_GREEN
     elif role == "user":
-        coloredRole = YELLOW
+        coloredRole = COL_YELLOW
     else:
-        coloredRole = BLUE
-    coloredRole += role + ">" + ENDC
+        coloredRole = COL_BLUE
+    coloredRole += role + ">" + COL_ENDC
     return coloredRole
 
 #==================================================================
@@ -162,6 +166,76 @@ def stripUserMessageMeta(msg_with_meta):
     return msg
 
 #==================================================================
+class ConvoJudge:
+    def __init__(self, model):
+        self.srcMessages = []
+        self.model = model
+        self.instructionsForSummary = """
+You will receive a text of a conversation between USER01 and ASSIST01 in the format:
+- SUMMARY (optional): [Summary of the conversation so far]
+- USER01: [Text]
+- ASSIST01: [Text]
+
+Output a synthesized summary of the conversation in less than 100 words.
+Do not prefix with "Summary:" or anything like that, it's implied. 
+Output must be optimized for a LLM, human-readability is not important.
+
+Rules for output:
+1. Retain key data (names, dates, numbers, stats) in summaries.
+2. If large data blocks, condense to essential information only.
+"""
+
+        self.instructionsForCritique = """
+You will receive a text of a conversation between USER01 and ASSIST01 in the format:
+- SUMMARY (optional): [Summary of the conversation so far]
+- USER01: [Text]
+- ASSIST01: [Text]
+
+ASSIST01 is a mind-reading AI based on an LLM. It must predict user's next actions
+and plant for it. This assistant needs your best possible feedback to improve user
+experience. The user is a busy person and the ASSIST01's job is to save the user's time.
+
+Generate a critique of the conversation. Be synthetic and concise. Output must be optimized
+for a LLM, human-readability is not important. Output guideline (modify as needed for LLMs):
+- Mood of user: satisfied, happy, frustrated, sad, angry, optimistic, pessimistic, etc.
+- Active discussion topic/plan: what is the current topic of discussion?
+- For this topic/goal/plan
+  - Guess next actions of the user.
+  - Suggest actions to help user.
+  - Suggest task-specific sub-assistants for delegation.
+
+When considering the user's plans and objectives, consider the user's time horizon.
+Look at the goal and what's after that as well (e.g. exfiltration).
+"""
+
+    def AddMessage(self, srcMsg):
+        self.srcMessages.append(srcMsg)
+
+    def buildConvoString(self):
+        convo = ""
+        for srcMsg in self.srcMessages:
+            convo += "- " + srcMsg['role'] + ": "
+            for cont in srcMsg['content']:
+                convo += cont['value'] + "\n"
+        return convo
+
+    def GenSummary(self, wrap):
+        response = wrap.CreateCompletion(model=self.model, messages=[
+            {"role": "system", "content": self.instructionsForSummary},
+            {"role": "user",   "content": self.buildConvoString()}
+        ])
+        return response.choices[0].message.content
+
+    def GenCritique(self, wrap):
+        response = wrap.CreateCompletion(model=self.model, messages=[
+            {"role": "system", "content": self.instructionsForCritique},
+            {"role": "user",   "content": self.buildConvoString()}
+        ])
+        return response.choices[0].message.content
+
+_judge = ConvoJudge(model=config["support_model_version"])
+
+#==================================================================
 # Create the assistant if it doesn't exist
 def createAssistant():
     tools = []
@@ -258,7 +332,7 @@ def get_loc_messages():
     # Create or get the session messages list
     return session.setdefault('loc_messages', [])
 
-def append_loc_message(message):
+def appendLocMessage(message):
     get_loc_messages().append(message)
     session.modified = True
 
@@ -334,7 +408,7 @@ def stripEmptyAnnotationsBug(out_msg):
     # Remove all occurrences of the pattern
     return re.sub(pattern, '', out_msg)
 
-def message_to_dict(message, make_file_url):
+def messageToLocMessage(message, make_file_url):
     result = {
         "role": message.role,
         "content": []
@@ -426,16 +500,27 @@ def index():
 
         # Append message to messages list
         logmsg(f"Message {i} ({msg.role}): {msg.content}")
-        append_loc_message(
-            message_to_dict(
+        appendLocMessage(
+            messageToLocMessage(
                 message=msg,
                 make_file_url=make_file_url))
 
     printChatMsg(f"Welcome to {config['app_title']}, v{config['app_version']}")
     printChatMsg(f"Assistant: {config['assistant_name']}")
-    printChatMsg("History:")
-    for msg in get_loc_messages():
-        printChatMsg(msg)
+
+    if (history := get_loc_messages()):
+        printChatMsg("History:")
+        for msg in get_loc_messages():
+            _judge.AddMessage(msg)
+            printChatMsg(msg)
+
+        printChatMsg(COL_DRKGRAY)
+        printChatMsg("** Summary:")
+        printChatMsg(_judge.GenSummary(_oa_wrap))
+        printChatMsg("** Critique:")
+        printChatMsg(_judge.GenCritique(_oa_wrap))
+        printChatMsg(COL_ENDC)
+
 
 #==================================================================
 def submit_message(assistant_id, thread_id, msg_text):
@@ -671,11 +756,10 @@ def send_message(msg_text):
     replies = []
     for msg in new_messages.data:
         # Append message to messages list
-        message_dict = message_to_dict(msg, make_file_url)
-
-        append_loc_message(message_dict)
+        locMessage = messageToLocMessage(msg, make_file_url)
+        appendLocMessage(locMessage)
         # We only want the content of the message
-        replies.append(message_dict)
+        replies.append(locMessage)
 
     logmsg(f"Replies: {replies}")
 
@@ -714,7 +798,17 @@ def main():
 
         # Simulate a response (replace with actual response handling)
         for reply in replies['replies']:
+            _judge.AddMessage(reply)
             printChatMsg(reply)
+
+        # Print the summary
+        printChatMsg(COL_DRKGRAY)
+        printChatMsg("** Summary:")
+        printChatMsg(_judge.GenSummary(_oa_wrap))
+        printChatMsg("** Critique:")
+        printChatMsg(_judge.GenCritique(_oa_wrap))
+        printChatMsg(COL_ENDC)
+
 
 if __name__ == "__main__":
     main()
