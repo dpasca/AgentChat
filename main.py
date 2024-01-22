@@ -167,14 +167,15 @@ def stripUserMessageMeta(msg_with_meta):
 
 #==================================================================
 class ConvoJudge:
-    def __init__(self, model):
+    def __init__(self, model, temperature):
         self.srcMessages = []
         self.model = model
+        self.temperature = temperature
         self.instructionsForSummary = """
-You will receive a text of a conversation between USER01 and ASSIST01 in the format:
+You will receive a conversation between User and Assistant in the format:
 - SUMMARY (optional): [Summary of the conversation so far]
-- USER01: [Text]
-- ASSIST01: [Text]
+- Message: <index> by <role>:\n<content>
+- Message: ...
 
 Output a synthesized summary of the conversation in less than 100 words.
 Do not prefix with "Summary:" or anything like that, it's implied. 
@@ -186,18 +187,46 @@ Rules for output:
 """
 
         self.instructionsForCritique = """
-You will receive a text of a conversation between USER01 and ASSIST01 in the format:
+You will receive a conversation between User and Assistant in the format:
 - SUMMARY (optional): [Summary of the conversation so far]
-- USER01: [Text]
-- ASSIST01: [Text]
+- Message: <index> by <role>:\n<content>
+- Message: ...
 
-ASSIST01 is a mind-reading AI based on an LLM. Its goal is to provide total delegation
+Assistant is a mind-reading AI based on an LLM. Its goal is to provide total delegation
 of the tasks required towards the user's goal.
 
-Generate a critique where ASSIST01 lacked and could have done better towards the goal
+Generate a critique where Assistant lacked and could have done better towards the goal
 of minimizing the user's effort to reach their goal. Be synthetic, direct and concise.
-This critique will be related to ASSIST01, for it to act upon it and improve.
+This critique will be related to Assistant, for it to act upon it and improve.
 Output must be optimized for a LLM, human-readability not a factor.
+Reply in the following format:
+{
+    "text": <critique text>,
+    "requires_action": <true/false>
+}
+"""
+
+        self.instructionsForFactCheck = """
+You will receive a conversation between User and Assistant in the format:
+- SUMMARY (optional): [Summary of the conversation so far]
+- Message: <index> by <role>:\n<content>
+- Message: ...
+
+Perform a fact-check for the last message in the conversation and
+output your findings in a fact-check list with the following format:
+{
+  "fact_check": [
+    {
+      "role": <role of the assertion>,
+      "msg_index": <message index>,
+      "applicable": <true/false>,
+      "correctness": <degree of correctness, 0 to 5>
+      "rebuttal": <extremely short rebuttal, inclusive of references>,
+      "links": <list of links to sources>,
+    }
+  ]
+}
+Do not produce "rebuttal" or "links" if "applicable" is false.
 """
 
     def AddMessage(self, srcMsg):
@@ -205,27 +234,47 @@ Output must be optimized for a LLM, human-readability not a factor.
 
     def buildConvoString(self):
         convo = ""
-        for srcMsg in self.srcMessages:
-            convo += "- " + srcMsg['role'] + ": "
+        for srcMsg, index in zip(self.srcMessages, range(len(self.srcMessages))):
+            #convo += "- " + srcMsg['role'] + ": "
+            convo += f"- Message: {index} by {srcMsg['role']}:\n"
             for cont in srcMsg['content']:
                 convo += cont['value'] + "\n"
         return convo
 
+    def buildConvoStringRevOrder(self):
+        convo = ""
+        for i in range(len(self.srcMessages)):
+            index = len(self.srcMessages) - i - 1
+            srcMsg = self.srcMessages[index]
+            #convo += "- " + srcMsg['role'] + ": "
+            convo += f"- Message: {index} by {srcMsg['role']}:\n"
+            for cont in srcMsg['content']:
+                convo += cont['value'] + "\n"
+        return convo
+
+    def genCompletion(self, wrap, instructions):
+        convo = self.buildConvoString()
+        #print(f"Sending Conversation:\n{convo}\n------")
+        response = wrap.CreateCompletion(
+            model=self.model,
+            temperature=self.temperature,
+            messages=[
+            {"role": "system", "content": instructions},
+            {"role": "user",   "content": convo}
+        ])
+        return response.choices[0].message.content
+
     def GenSummary(self, wrap):
-        response = wrap.CreateCompletion(model=self.model, messages=[
-            {"role": "system", "content": self.instructionsForSummary},
-            {"role": "user",   "content": self.buildConvoString()}
-        ])
-        return response.choices[0].message.content
-
+        return self.genCompletion(wrap, self.instructionsForSummary)
     def GenCritique(self, wrap):
-        response = wrap.CreateCompletion(model=self.model, messages=[
-            {"role": "system", "content": self.instructionsForCritique},
-            {"role": "user",   "content": self.buildConvoString()}
-        ])
-        return response.choices[0].message.content
+        return self.genCompletion(wrap, self.instructionsForCritique)
+    def GenFactCheck(self, wrap):
+        return self.genCompletion(wrap, self.instructionsForFactCheck)
 
-_judge = ConvoJudge(model=config["support_model_version"])
+_judge = ConvoJudge(
+    model=config["support_model_version"],
+    temperature=config["support_model_temperature"]
+    )
 
 #==================================================================
 # Create the assistant if it doesn't exist
@@ -514,7 +563,7 @@ def index():
             _judge.AddMessage(msg)
             printChatMsg(msg)
 
-        printSummaryAndCritique() # For debug
+        #printFactCheck(json.loads(_judge.GenFactCheck(_oa_wrap))) # For debug
 
 #==================================================================
 def submit_message(assistant_id, thread_id, msg_text):
@@ -765,6 +814,24 @@ def send_message(msg_text):
         return json.dumps({'replies': []}), 200
 
 #==================================================================
+def printFactCheck(fcReplies):
+    if len(fcReplies['fact_check']) > 0:
+        for reply in fcReplies['fact_check']:
+            #role = reply['role']
+            rebuttal = reply.get('rebuttal') or ''
+            links = reply.get('links') or []
+            if rebuttal == '' and len(links) == 0:
+                continue
+
+            outStr = f"\n{COL_DRKGRAY} NOTICE: {rebuttal}"
+            if len(links) > 0:
+                outStr += "\n"
+                for link in links:
+                    outStr += f"- <{link}>\n"
+
+            printChatMsg(outStr)
+
+#==================================================================
 # Main loop for console app
 def main():
 
@@ -795,8 +862,7 @@ def main():
             _judge.AddMessage(reply)
             printChatMsg(reply)
 
-        printSummaryAndCritique() # For debug
-
+        printFactCheck(json.loads(_judge.GenFactCheck(_oa_wrap)))
 
 if __name__ == "__main__":
     main()

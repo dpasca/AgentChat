@@ -1,14 +1,15 @@
 # AgentChat
 
-An agent chat app with fact-checking (WIP) and web search.
+An agent chat app with fact-checking and web search.
 
 Developed by [Davide Pasca](https://github.com/dpasca).
 
-![Screenshot 01](docs/agentchat_sshot_01.webp)
+![Screenshot 01](docs/agentchat_sshot_02.webp)
 
 ## Features
 
 - AI chatbot based on OpenAI and Assistant API (beta)
+- Live fact-checking using a conversation critic
 - Sense of time and location using prompt injection
 - Web search using function-calling and DuckDuckGo
 - Image generation (python plots) and storage

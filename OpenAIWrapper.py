@@ -82,7 +82,8 @@ class OpenAIWrapper:
         return self.client.files.content(file_id)
 
     #==== Completions
-    def CreateCompletion(self, model, messages):
+    def CreateCompletion(self, model, messages, temperature=0.7):
         return self.client.chat.completions.create(
             model=model,
-            messages=messages)
+            messages=messages,
+            temperature=temperature)
