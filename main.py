@@ -191,21 +191,13 @@ You will receive a text of a conversation between USER01 and ASSIST01 in the for
 - USER01: [Text]
 - ASSIST01: [Text]
 
-ASSIST01 is a mind-reading AI based on an LLM. It must predict user's next actions
-and plant for it. This assistant needs your best possible feedback to improve user
-experience. The user is a busy person and the ASSIST01's job is to save the user's time.
+ASSIST01 is a mind-reading AI based on an LLM. Its goal is to provide total delegation
+of the tasks required towards the user's goal.
 
-Generate a critique of the conversation. Be synthetic and concise. Output must be optimized
-for a LLM, human-readability is not important. Output guideline (modify as needed for LLMs):
-- Mood of user: satisfied, happy, frustrated, sad, angry, optimistic, pessimistic, etc.
-- Active discussion topic/plan: what is the current topic of discussion?
-- For this topic/goal/plan
-  - Guess next actions of the user.
-  - Suggest actions to help user.
-  - Suggest task-specific sub-assistants for delegation.
-
-When considering the user's plans and objectives, consider the user's time horizon.
-Look at the goal and what's after that as well (e.g. exfiltration).
+Generate a critique where ASSIST01 lacked and could have done better towards the goal
+of minimizing the user's effort to reach their goal. Be synthetic, direct and concise.
+This critique will be related to ASSIST01, for it to act upon it and improve.
+Output must be optimized for a LLM, human-readability not a factor.
 """
 
     def AddMessage(self, srcMsg):
@@ -485,6 +477,14 @@ def make_file_url(file_id, simple_name):
     return _storage.GetFileURL(file_path)
 
 #==================================================================
+def printSummaryAndCritique():
+    printChatMsg(f"\n{COL_DRKGRAY}** Summary:")
+    printChatMsg(_judge.GenSummary(_oa_wrap))
+    printChatMsg(f"\n{COL_DRKGRAY}** Critique:")
+    printChatMsg(_judge.GenCritique(_oa_wrap))
+    printChatMsg(COL_ENDC)
+
+#==================================================================
 def index():
     # Load or create the thread
     thread_id = createThread(force_new=False)
@@ -514,13 +514,7 @@ def index():
             _judge.AddMessage(msg)
             printChatMsg(msg)
 
-        printChatMsg(COL_DRKGRAY)
-        printChatMsg("** Summary:")
-        printChatMsg(_judge.GenSummary(_oa_wrap))
-        printChatMsg("** Critique:")
-        printChatMsg(_judge.GenCritique(_oa_wrap))
-        printChatMsg(COL_ENDC)
-
+        printSummaryAndCritique() # For debug
 
 #==================================================================
 def submit_message(assistant_id, thread_id, msg_text):
@@ -801,13 +795,7 @@ def main():
             _judge.AddMessage(reply)
             printChatMsg(reply)
 
-        # Print the summary
-        printChatMsg(COL_DRKGRAY)
-        printChatMsg("** Summary:")
-        printChatMsg(_judge.GenSummary(_oa_wrap))
-        printChatMsg("** Critique:")
-        printChatMsg(_judge.GenCritique(_oa_wrap))
-        printChatMsg(COL_ENDC)
+        printSummaryAndCritique() # For debug
 
 
 if __name__ == "__main__":

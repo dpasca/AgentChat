@@ -1,7 +1,7 @@
 {
     "app_version": "0.0.1",
     "model_version": "gpt-4-1106-preview",
-    "support_model_version": "gpt-4-1106-preview",
+    "support_model_version": "gpt-4",
     "enable_retrieval": true,
     "assistant_name": "Xiao",
     "app_title" : "Chat with Xiao",
