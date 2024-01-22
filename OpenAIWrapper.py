@@ -5,6 +5,7 @@
 # Desc: A simple wrapper, since Assistant API is in beta
 #==================================================================
 from openai import OpenAI
+from typing import Tuple
 
 #==================================================================
 class OpenAIWrapper:
@@ -32,7 +33,7 @@ class OpenAIWrapper:
 
     # Helper to create or update an assistant
     # Returns assistant, was_created
-    def CreateOrUpdateAssistant(self, name, instructions, tools, model) -> (object, bool):
+    def CreateOrUpdateAssistant(self, name, instructions, tools, model) -> Tuple[object, bool]:
         assists = self.ListAssistants()
         for assist in assists:
             if assist.name == name:
@@ -46,7 +47,7 @@ class OpenAIWrapper:
     def RetrieveThread(self, thread_id):
         return self.client.beta.threads.retrieve(thread_id)
 
-    def ListThreadMessages(self, thread_id, order, after=None):
+    def ListThreadMessages(self, thread_id, order, after=''):
         return self.client.beta.threads.messages.list(thread_id=thread_id, order=order, after=after)
 
     def CreateMessage(self, thread_id, role, content):
@@ -79,3 +80,9 @@ class OpenAIWrapper:
     #==== Files
     def GetFileContent(self, file_id):
         return self.client.files.content(file_id)
+
+    #==== Completions
+    def CreateCompletion(self, model, messages):
+        return self.client.chat.completions.create(
+            model=model,
+            messages=messages)
