@@ -231,6 +231,9 @@ Do not produce "rebuttal" or "links" if "applicable" is false.
 
     def AddMessage(self, srcMsg):
         self.srcMessages.append(srcMsg)
+    
+    def ClearMessages(self):
+        self.srcMessages = []
 
     def buildConvoString(self, maxMessages):
         convo = ""
@@ -529,6 +532,8 @@ def printSummaryAndCritique():
 def index():
     # Load or create the thread
     thread_id = createThread(force_new=False)
+
+    _judge.ClearMessages()
 
     # Always clear the local messages, because we will repopulate
     #  from the thread history below
@@ -844,6 +849,7 @@ def main():
             session['loc_messages'] = []
             # Force-create a new thread
             createThread(force_new=True)
+            _judge.ClearMessages()
             continue
 
         # Exit condition (you can define your own)
