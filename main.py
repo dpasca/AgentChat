@@ -233,7 +233,7 @@ ToolActions = {
     "get_user_local_time": get_user_local_time,
 }
 
-def fallback_tool_function(arguments):
+def fallback_tool_function(name, arguments):
     logerr(f"Unknown function {name}. Falling back to web search !")
     name_to_human_friendly = name.replace("_", " ")
     query = f"What is {name_to_human_friendly} of " + " ".join(arguments.values())
@@ -519,7 +519,7 @@ def handle_required_action(run, thread_id):
         if name in ToolActions:
             responses = ToolActions[name](arguments)
         else:
-            responses = fallback_tool_function(arguments)
+            responses = fallback_tool_function(name, arguments)
 
         if responses is not None:
             tool_outputs.append(
