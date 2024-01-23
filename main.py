@@ -145,57 +145,113 @@ _judge = ConvoJudge(
     )
 
 #==================================================================
+from duckduckgo_search import DDGS
+import sys
+
+def ddgsTextSearch(query, max_results=None):
+    """
+    Perform a text search using the DuckDuckGo Search API.
+
+    Args:
+        query (str): The search query string.
+        max_results (int, optional): The maximum number of search results to return. If None, returns all available results.
+
+    Returns:
+        list of dict: A list of search results, each result being a dictionary.
+    """
+    with DDGS() as ddgs:
+        results = [r for r in ddgs.text(query, max_results=max_results)]
+    return results
+
+#==================================================================
+def do_get_user_info():
+    # Populate the session['user_info'] with local user info (shell locale and timezone)
+    localeStr = locale.getlocale()[0]
+    currentTime = datetime.now()
+    if not 'user_info' in session:
+        session['user_info'] = {}
+    session['user_info']['timezone'] = str(currentTime.astimezone().tzinfo)
+    return session['user_info']
+
+# Define your functions
+def perform_web_search(arguments):
+    return ddgsTextSearch(arguments["query"], max_results=10)
+
+def get_user_info(arguments=None):
+    do_get_user_info()
+    return { "user_info": session['user_info'] }
+
+def get_unix_time(arguments=None):
+    return { "unix_time": int(time.time()) }
+
+def get_user_local_time(arguments=None):
+    do_get_user_info()
+    timezone = session['user_info']['timezone']
+    try:
+        tz_timezone = pytz.timezone(timezone)
+        user_time = datetime.now(tz_timezone)
+    except:
+        user_time = datetime.now()
+    return {
+        "user_local_time": json.dumps(user_time, default=str),
+        "user_timezone": timezone }
+
+# Tool definitions and actions
+ToolDefinitions = {
+    "perform_web_search": {
+        "name": "perform_web_search",
+        "description": "Perform a web search for any unknown or current information",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    "get_user_info": {
+        "name": "get_user_info",
+        "description": "Get the user info, such as timezone and user-agent (browser)",
+    },
+    "get_unix_time": {
+        "name": "get_unix_time",
+        "description": "Get the current unix time",
+    },
+    "get_user_local_time": {
+        "name": "get_user_local_time",
+        "description": "Get the user local time and timezone",
+    },
+}
+
+ToolActions = {
+    "perform_web_search": perform_web_search,
+    "get_user_info": get_user_info,
+    "get_unix_time": get_unix_time,
+    "get_user_local_time": get_user_local_time,
+}
+
+def fallback_tool_function(arguments):
+    logerr(f"Unknown function {name}. Falling back to web search !")
+    name_to_human_friendly = name.replace("_", " ")
+    query = f"What is {name_to_human_friendly} of " + " ".join(arguments.values())
+    logmsg(f"Submitting made-up query: {query}")
+    return ddgsTextSearch(query, max_results=3)
+
+#==================================================================
 # Create the assistant if it doesn't exist
 def createAssistant():
     tools = []
     tools.append({"type": "code_interpreter"})
 
-    if ENABLE_WEBSEARCH:
-        tools.append(
-        {
-            "type": "function",
-            "function": {
-                "name": "perform_web_search",
-                "description": "Perform a web search for any unknown or current information",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        })
-
-    tools.append(
-    {
-        "type": "function",
-        "function": {
-            "name": "get_user_info",
-            "description": "Get the user info, such as timezone and user-agent (browser)",
-        }
-    })
-
-    tools.append(
-    {
-        "type": "function",
-        "function": {
-            "name": "get_unix_time",
-            "description": "Get the current unix time",
-        }
-    })
-
-    tools.append(
-    {
-        "type": "function",
-        "function": {
-            "name": "get_user_local_time",
-            "description": "Get the user local time and timezone",
-        }
-    })
+    # Setup the tools
+    for name in ToolDefinitions:
+        if not ENABLE_WEBSEARCH and name == "perform_web_search":
+            continue
+        defn = ToolDefinitions[name]
+        tools.append({ "type": "function", "function": defn })
 
     if config["enable_retrieval"]:
         tools.append({"type": "retrieval"})
@@ -439,35 +495,6 @@ def wait_to_use_thread(thread_id):
     return False
 
 #==================================================================
-from duckduckgo_search import DDGS
-import sys
-
-def ddgsTextSearch(query, max_results=None):
-    """
-    Perform a text search using the DuckDuckGo Search API.
-
-    Args:
-        query (str): The search query string.
-        max_results (int, optional): The maximum number of search results to return. If None, returns all available results.
-
-    Returns:
-        list of dict: A list of search results, each result being a dictionary.
-    """
-    with DDGS() as ddgs:
-        results = [r for r in ddgs.text(query, max_results=max_results)]
-    return results
-
-#==================================================================
-def do_get_user_info():
-    # Populate the session['user_info'] with local user info (shell locale and timezone)
-    localeStr = locale.getlocale()[0]
-    currentTime = datetime.now()
-    if not 'user_info' in session:
-        session['user_info'] = {}
-    session['user_info']['timezone'] = str(currentTime.astimezone().tzinfo)
-    return session['user_info']
-
-#==================================================================
 # Handle the required action (function calling)
 def handle_required_action(run, thread_id):
     if run.required_action is None:
@@ -488,36 +515,11 @@ def handle_required_action(run, thread_id):
         logmsg(f"Function Name: {name}")
         logmsg(f"Arguments: {arguments}")
 
-        responses = None
-        if name == "perform_web_search":
-            responses = ddgsTextSearch(arguments["query"], max_results=10)
-        elif name == "get_user_info":
-            do_get_user_info()
-            responses = { "user_info": session['user_info'] }
-        elif name == "get_unix_time":
-            responses = { "unix_time": int(time.time()) }
-            logmsg(f"Unix time: {responses['unix_time']}")
-        elif name == "get_user_local_time":
-            do_get_user_info()
-            timezone = session['user_info']['timezone']
-            try:
-                tz_timezone = pytz.timezone(timezone)
-                logmsg(f"User timezone: {timezone}, pytz timezone: {tz_timezone}")
-                user_time = datetime.now(tz_timezone)
-            except:
-                logerr(f"Unknown timezone {timezone}")
-                user_time = datetime.now()
-
-            logmsg(f"User local time: {user_time}")
-            responses = {
-                "user_local_time": json.dumps(user_time, default=str),
-                "user_timezone": timezone }
+        # Look up the function in the dictionary and call it
+        if name in ToolActions:
+            responses = ToolActions[name](arguments)
         else:
-            logerr(f"Unknown function {name}. Falling back to web search !")
-            name_to_human_friendly = name.replace("_", " ")
-            query = f"What is {name_to_human_friendly} of " + " ".join(arguments.values())
-            logmsg(f"Submitting made-up query: {query}")
-            responses = ddgsTextSearch(query, max_results=3)
+            responses = fallback_tool_function(arguments)
 
         if responses is not None:
             tool_outputs.append(
