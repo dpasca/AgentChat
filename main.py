@@ -17,6 +17,8 @@ from StorageLocal import StorageLocal as Storage
 from io import BytesIO
 from logger import *
 import re
+from ConvoJudge import ConvoJudge
+from OAIUtils import *
 
 # Load environment variables from .env file
 load_dotenv()
@@ -166,106 +168,6 @@ def stripUserMessageMeta(msg_with_meta):
     return msg
 
 #==================================================================
-class ConvoJudge:
-    def __init__(self, model, temperature):
-        self.srcMessages = []
-        self.model = model
-        self.temperature = temperature
-        self.instructionsForSummary = """
-You will receive a conversation between User and Assistant in the format:
-- SUMMARY (optional): [Summary of the conversation so far]
-- Message: <index> by <role>:\n<content>
-- Message: ...
-
-Output a synthesized summary of the conversation in less than 100 words.
-Do not prefix with "Summary:" or anything like that, it's implied. 
-Output must be optimized for a LLM, human-readability is not important.
-
-Rules for output:
-1. Retain key data (names, dates, numbers, stats) in summaries.
-2. If large data blocks, condense to essential information only.
-"""
-
-        self.instructionsForCritique = """
-You will receive a conversation between User and Assistant in the format:
-- SUMMARY (optional): [Summary of the conversation so far]
-- Message: <index> by <role>:\n<content>
-- Message: ...
-
-Assistant is a mind-reading AI based on an LLM. Its goal is to provide total delegation
-of the tasks required towards the user's goal.
-
-Generate a critique where Assistant lacked and could have done better towards the goal
-of minimizing the user's effort to reach their goal. Be synthetic, direct and concise.
-This critique will be related to Assistant, for it to act upon it and improve.
-Output must be optimized for a LLM, human-readability not a factor.
-Reply in the following format:
-{
-    "text": <critique text>,
-    "requires_action": <true/false>
-}
-"""
-
-        self.instructionsForFactCheck = """
-You will receive a conversation between User and Assistant in the format:
-- SUMMARY (optional): [Summary of the conversation so far]
-- Message: <index> by <role>:\n<content>
-- Message: ...
-
-Perform a fact-check for the last message in the conversation and
-output your findings in a fact-check list with the following format:
-{
-  "fact_check": [
-    {
-      "role": <role of the assertion>,
-      "msg_index": <message index>,
-      "applicable": <true/false>,
-      "correctness": <degree of correctness, 0 to 5>
-      "rebuttal": <extremely short rebuttal, inclusive of references>,
-      "links": <list of links to sources>,
-    }
-  ]
-}
-Do not produce "rebuttal" or "links" if "applicable" is false.
-"""
-
-    def AddMessage(self, srcMsg):
-        self.srcMessages.append(srcMsg)
-    
-    def ClearMessages(self):
-        self.srcMessages = []
-
-    def buildConvoString(self, maxMessages):
-        convo = ""
-        n = len(self.srcMessages)
-        staIdx = max(0, n - maxMessages)
-        for index in range(staIdx, n):
-            srcMsg = self.srcMessages[index]
-            #convo += "- " + srcMsg['role'] + ": "
-            convo += f"- Message: {index} by {srcMsg['role']}:\n"
-            for cont in srcMsg['content']:
-                convo += cont['value'] + "\n"
-        return convo
-
-    def genCompletion(self, wrap, instructions, maxMessages=1000):
-        convo = self.buildConvoString(maxMessages)
-        #print(f"Sending Conversation:\n{convo}\n------")
-        response = wrap.CreateCompletion(
-            model=self.model,
-            temperature=self.temperature,
-            messages=[
-            {"role": "system", "content": instructions},
-            {"role": "user",   "content": convo}
-        ])
-        return response.choices[0].message.content
-
-    def GenSummary(self, wrap):
-        return self.genCompletion(wrap, self.instructionsForSummary)
-    def GenCritique(self, wrap):
-        return self.genCompletion(wrap, self.instructionsForCritique)
-    def GenFactCheck(self, wrap):
-        return self.genCompletion(wrap, self.instructionsForFactCheck, 3)
-
 _judge = ConvoJudge(
     model=config["support_model_version"],
     temperature=config["support_model_temperature"]
@@ -372,77 +274,6 @@ def appendLocMessage(message):
     get_loc_messages().append(message)
     session.modified = True
 
-def isImageAnnotation(a):
-    return a.type == "file_path" and a.text.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
-
-# Replace the file paths with actual URLs
-def resolveImageAnnotations(out_msg, annotations, make_file_url):
-    new_msg = out_msg
-    # Sort annotations by start_index in descending order
-    sorted_annotations = sorted(annotations, key=lambda x: x.start_index, reverse=True)
-
-    for a in sorted_annotations:
-        if isImageAnnotation(a):
-            file_id = a.file_path.file_id
-
-            logmsg(f"Found file {file_id} associated with '{a.text}'")
-
-            # Extract a "simple name" from the annotation text
-            # It's likely to be a full-pathname, so we just take the last part
-            # If there are no slashes, we take the whole name
-            simple_name = a.text.split('/')[-1] if '/' in a.text else a.text
-            # Replace any characters that are not alphanumeric, underscore, or hyphen with an underscore
-            simple_name = re.sub(r'[^\w\-.]', '_', simple_name)
-
-            file_url = make_file_url(file_id, simple_name)
-
-            logmsg(f"Replacing file path {a.text} with URL {file_url}")
-
-            # Replace the file path with the file URL
-            new_msg = new_msg[:a.start_index] + file_url + new_msg[a.end_index:]
-
-    return new_msg
-
-def resolveCiteAnnotations(out_msg, annotations):
-    citations = []
-    for index, a in enumerate(annotations):
-
-        #if isImageAnnotation(a):
-        #    continue
-
-        logmsg(f"Found citation '{a.text}'")
-        logmsg(f"out_msg: {out_msg}")
-        # Replace the text with a footnote
-        out_msg = out_msg.replace(a.text, f' [{index}]')
-
-        logmsg(f"out_msg: {out_msg}")
-
-        # Gather citations based on annotation attributes
-        if (file_citation := getattr(a, 'file_citation', None)):
-            logmsg(f"file_citation: {file_citation}")
-            cited_file = _oa_wrap.client.files.retrieve(file_citation.file_id)
-            citations.append(f'[{index}] {file_citation.quote} from {cited_file.filename}')
-        elif (file_path := getattr(a, 'file_path', None)):
-            logmsg(f"file_path: {file_path}")
-            cited_file = _oa_wrap.client.files.retrieve(file_path.file_id)
-            citations.append(f'[{index}] Click <here> to download {cited_file.filename}')
-            # Note: File download functionality not implemented above for brevity
-
-    # Add footnotes to the end of the message before displaying to user
-    if len(citations) > 0:
-        out_msg += '\n' + '\n'.join(citations)
-
-    return out_msg
-
-import re
-
-# Deal with the bug where empty annotations are added to the message
-# We go and remove all 【*†*】blocks
-def stripEmptyAnnotationsBug(out_msg):
-    # This pattern matches 【*†*】blocks
-    pattern = r'【\d+†.*?】'
-    # Remove all occurrences of the pattern
-    return re.sub(pattern, '', out_msg)
 
 def messageToLocMessage(message, make_file_url):
     result = {
@@ -462,16 +293,16 @@ def messageToLocMessage(message, make_file_url):
 
                 logmsg(f"Annotations: {content.text.annotations}")
 
-                out_msg = resolveImageAnnotations(
+                out_msg = ResolveImageAnnotations(
                     out_msg=out_msg,
                     annotations=content.text.annotations,
                     make_file_url=make_file_url)
 
-                out_msg = resolveCiteAnnotations(
+                out_msg = ResolveCiteAnnotations(
                     out_msg=out_msg,
                     annotations=content.text.annotations)
 
-                out_msg = stripEmptyAnnotationsBug(out_msg)
+                out_msg = StripEmptyAnnotationsBug(out_msg)
 
             result["content"].append({
                 "value": out_msg,
