@@ -144,9 +144,9 @@ _judge = ConvoJudge(
     temperature=config["support_model_temperature"]
     )
 
+# Callback to get the user info from the session
 def local_get_user_info():
     # Populate the session['user_info'] with local user info (shell locale and timezone)
-    #localeStr = locale.getlocale()[0]
     currentTime = datetime.now()
     if not 'user_info' in session:
         session['user_info'] = {}
@@ -156,10 +156,10 @@ def local_get_user_info():
 #==================================================================
 # Create the assistant if it doesn't exist
 def createAssistant():
+    AssistTools.SetSuperGetUserInfoFn(local_get_user_info)
+
     tools = []
     tools.append({"type": "code_interpreter"})
-
-    AssistTools.SetSuperGetUserInfoFn(local_get_user_info)
 
     # Setup the tools
     for name, defn in AssistTools.ToolDefinitions.items():
