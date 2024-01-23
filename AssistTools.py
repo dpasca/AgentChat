@@ -12,13 +12,13 @@ import pytz
 from datetime import datetime
 from logger import *
 from duckduckgo_search import DDGS
+from typing import Callable
 
-session = None
+super_get_user_info: Callable[[], dict] = lambda: None
 
-# Setup the `session` dictionary used by the tools below
-def SetSession(new_session):
-    global session
-    session = new_session
+def SetSuperGetUserInfoFn(super_get_user_info_):
+    global super_get_user_info
+    super_get_user_info = super_get_user_info_
 
 #==================================================================
 def ddgsTextSearch(query, max_results=None):
@@ -36,30 +36,18 @@ def ddgsTextSearch(query, max_results=None):
         results = [r for r in ddgs.text(query, max_results=max_results)]
     return results
 
-#==================================================================
-def do_get_user_info():
-    # Populate the session['user_info'] with local user info (shell locale and timezone)
-    localeStr = locale.getlocale()[0]
-    currentTime = datetime.now()
-    if not 'user_info' in session:
-        session['user_info'] = {}
-    session['user_info']['timezone'] = str(currentTime.astimezone().tzinfo)
-    return session['user_info']
-
 # Define your functions
 def perform_web_search(arguments):
     return ddgsTextSearch(arguments["query"], max_results=10)
 
 def get_user_info(arguments=None):
-    do_get_user_info()
-    return { "user_info": session['user_info'] }
+    return { "user_info": super_get_user_info() }
 
 def get_unix_time(arguments=None):
     return { "unix_time": int(time.time()) }
 
 def get_user_local_time(arguments=None):
-    do_get_user_info()
-    timezone = session['user_info']['timezone']
+    timezone = super_get_user_info()['timezone']
     try:
         tz_timezone = pytz.timezone(timezone)
         user_time = datetime.now(tz_timezone)
