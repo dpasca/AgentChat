@@ -53,36 +53,7 @@ def makeColoredRole(role):
     coloredRole += role + ">" + COL_ENDC
     return coloredRole
 
-#==================================================================
-# Our own local `session` dictionary to simulate Flask's session
-class SessionDict(dict):
-    def __init__(self, filename, *args, **kwargs):
-        self.filename = filename
-        self.modified = False
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                data = json.load(f)
-                super(SessionDict, self).__init__(data, *args, **kwargs)
-        else:
-            super(SessionDict, self).__init__(*args, **kwargs)
-
-    def __setitem__(self, key, value):
-        self.modified = True
-        super(SessionDict, self).__setitem__(key, value)
-        self.saveToDisk()
-
-    def __delitem__(self, key):
-        self.modified = True
-        super(SessionDict, self).__delitem__(key)
-        self.saveToDisk()
-
-    def saveToDisk(self):
-        if self.modified:
-            os.makedirs(os.path.dirname(self.filename), exist_ok=True)
-            with open(self.filename, 'w') as f:
-                json.dump(self, f)
-            self.modified = False
-            logmsg(f"Saved session to {self.filename}")
+from SessionDict import SessionDict
 
 session = SessionDict(f'_storage/{USER_BUCKET_PATH}/session.json')
 logmsg(f"Session: {session}")
