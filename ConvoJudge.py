@@ -68,6 +68,8 @@ output your findings in a fact-check list with the following format:
   ]
 }
 Do not produce "rebuttal" or "links" if "applicable" is false.
+Beware of the fact that the assisant may have tools that you may not be
+aware of, such as access to the Internet and user's details.
 """
 
     def AddMessage(self, srcMsg):
