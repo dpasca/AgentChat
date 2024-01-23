@@ -387,9 +387,9 @@ def printSummaryAndCritique():
     printChatMsg(COL_ENDC)
 
 #==================================================================
-def index():
+def index(do_clear=False):
     # Load or create the thread
-    thread_id = createThread(force_new=False)
+    thread_id = createThread(force_new=do_clear)
 
     _judge.ClearMessages()
 
@@ -638,11 +638,19 @@ def printFactCheck(fcReplies):
 
 #==================================================================
 # Main loop for console app
+import argparse
+
 def main():
+
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--clear', action='store_true',
+                        help='clear the chat at the start')
+
+    args = parser.parse_args()
 
     print(f"Logging is {'Enabled' if ENABLE_LOGGING else 'Disabled'}")
 
-    index()
+    index(args.clear)
 
     while True:
         # Get user input
