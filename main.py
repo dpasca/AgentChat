@@ -242,7 +242,8 @@ def messageToLocMessage(message, make_file_url):
 
                 out_msg = ResolveCiteAnnotations(
                     out_msg=out_msg,
-                    annotations=content.text.annotations)
+                    annotations=content.text.annotations,
+                    wrap=_oa_wrap)
 
                 out_msg = StripEmptyAnnotationsBug(out_msg)
 

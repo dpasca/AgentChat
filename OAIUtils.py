@@ -39,7 +39,7 @@ def ResolveImageAnnotations(out_msg, annotations, make_file_url):
 
     return new_msg
 
-def ResolveCiteAnnotations(out_msg, annotations):
+def ResolveCiteAnnotations(out_msg, annotations, wrap):
     citations = []
     for index, a in enumerate(annotations):
 
@@ -56,11 +56,11 @@ def ResolveCiteAnnotations(out_msg, annotations):
         # Gather citations based on annotation attributes
         if (file_citation := getattr(a, 'file_citation', None)):
             logmsg(f"file_citation: {file_citation}")
-            cited_file = _oa_wrap.client.files.retrieve(file_citation.file_id)
+            cited_file = wrap.client.files.retrieve(file_citation.file_id)
             citations.append(f'[{index}] {file_citation.quote} from {cited_file.filename}')
         elif (file_path := getattr(a, 'file_path', None)):
             logmsg(f"file_path: {file_path}")
-            cited_file = _oa_wrap.client.files.retrieve(file_path.file_id)
+            cited_file = wrap.client.files.retrieve(file_path.file_id)
             citations.append(f'[{index}] Click <here> to download {cited_file.filename}')
             # Note: File download functionality not implemented above for brevity
 
