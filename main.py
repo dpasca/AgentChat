@@ -105,6 +105,7 @@ For each piece of mathematical content:
 # Initialize OpenAI API
 _oa_wrap = OpenAIWrapper(api_key=os.environ.get("OPENAI_API_KEY"))
 
+#===============================================================================
 def sleepForAPI():
     if ENABLE_LOGGING and ENABLE_SLEEP_LOGGING:
         caller = inspect.currentframe().f_back.f_code.co_name
@@ -207,12 +208,12 @@ def createThread(force_new=False):
     return thread.id
 
 # Local messages management (a cache of the thread)
-def get_loc_messages():
+def getLocMessages():
     # Create or get the session messages list
     return session.setdefault('loc_messages', [])
 
 def appendLocMessage(message):
-    get_loc_messages().append(message)
+    getLocMessages().append(message)
     session.modified = True
 
 
@@ -326,9 +327,9 @@ def index(do_clear=False):
     printChatMsg(f"Welcome to {config['app_title']}, v{config['app_version']}")
     printChatMsg(f"Assistant: {config['assistant_name']}")
 
-    if (history := get_loc_messages()):
+    if (history := getLocMessages()):
         printChatMsg("History:")
-        for msg in get_loc_messages():
+        for msg in getLocMessages():
             _judge.AddMessage(msg)
             printChatMsg(msg)
 
